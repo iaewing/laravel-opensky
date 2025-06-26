@@ -45,7 +45,7 @@ class OpenSkyClient
         ?string $clientSecret = null,
         ?string $oauthTokenUrl = null
     ) {
-        $this->baseUrl = rtrim($baseUrl, '/');
+        $this->baseUrl = rtrim($baseUrl, '/') . '/'; // Ensure trailing slash
         $this->username = $username;
         $this->password = $password;
         $this->clientId = $clientId;
@@ -56,6 +56,10 @@ class OpenSkyClient
         $this->httpClient = new Client([
             'base_uri' => $this->baseUrl,
             'timeout' => $this->timeout,
+            'headers' => [
+                'User-Agent' => 'Laravel OpenSky Package/1.0 (Guzzle)',
+                'Accept' => 'application/json',
+            ],
         ]);
     }
 
@@ -95,7 +99,7 @@ class OpenSkyClient
             'extended' => $extended,
         ], fn($value) => $value !== null);
 
-        $response = $this->makeRequest('GET', '/states/all', $params);
+        $response = $this->makeRequest('GET', 'states/all', $params);
         
         return StateVectorResponse::fromArray($response);
     }
@@ -119,7 +123,7 @@ class OpenSkyClient
             'serials' => $serials,
         ], fn($value) => $value !== null);
 
-        $response = $this->makeRequest('GET', '/states/own', $params);
+        $response = $this->makeRequest('GET', 'states/own', $params);
         
         return StateVectorResponse::fromArray($response);
     }
@@ -141,7 +145,7 @@ class OpenSkyClient
             throw OpenSkyException::invalidTimeInterval('2 hours');
         }
 
-        $response = $this->makeRequest('GET', '/flights/all', [
+        $response = $this->makeRequest('GET', 'flights/all', [
             'begin' => $begin,
             'end' => $end,
         ]);
@@ -167,7 +171,7 @@ class OpenSkyClient
             throw OpenSkyException::invalidTimeInterval('30 days');
         }
 
-        $response = $this->makeRequest('GET', '/flights/aircraft', [
+        $response = $this->makeRequest('GET', 'flights/aircraft', [
             'icao24' => strtolower($icao24),
             'begin' => $begin,
             'end' => $end,
@@ -194,7 +198,7 @@ class OpenSkyClient
             throw OpenSkyException::invalidTimeInterval('7 days');
         }
 
-        $response = $this->makeRequest('GET', '/flights/arrival', [
+        $response = $this->makeRequest('GET', 'flights/arrival', [
             'airport' => $airport,
             'begin' => $begin,
             'end' => $end,
@@ -221,7 +225,7 @@ class OpenSkyClient
             throw OpenSkyException::invalidTimeInterval('7 days');
         }
 
-        $response = $this->makeRequest('GET', '/flights/departure', [
+        $response = $this->makeRequest('GET', 'flights/departure', [
             'airport' => $airport,
             'begin' => $begin,
             'end' => $end,
@@ -244,7 +248,7 @@ class OpenSkyClient
      */
     public function getTrackByAircraft(string $icao24, int $time = 0): TrackResponse
     {
-        $response = $this->makeRequest('GET', '/tracks', [
+        $response = $this->makeRequest('GET', 'tracks', [
             'icao24' => strtolower($icao24),
             'time' => $time,
         ]);
@@ -357,7 +361,10 @@ class OpenSkyClient
             $expiresIn = $data['expires_in'] ?? 1800; // Default to 30 minutes
 
             if (!$this->accessToken) {
-                throw OpenSkyException::oauthTokenFailed('No access token received');
+                // Add more detailed error information
+                throw OpenSkyException::oauthTokenFailed(
+                    'No access token received. Response: ' . json_encode($data)
+                );
             }
 
             // Cache the token for slightly less than its expiry time to avoid edge cases
