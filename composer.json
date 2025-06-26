@@ -1,0 +1,46 @@
+{
+    "name": "iaewing/laravel-opensky",
+    "description": "Laravel package for OpenSky Network API integration",
+    "type": "library",
+    "keywords": ["laravel", "opensky", "aviation", "flight-tracking", "api"],
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Ian Ewing",
+            "email": "ian@ewing.codes"
+        }
+    ],
+    "require": {
+        "php": "^8.1",
+        "illuminate/support": "^9.0|^10.0|^11.0",
+        "illuminate/http": "^9.0|^10.0|^11.0",
+        "guzzlehttp/guzzle": "^7.0"
+    },
+    "require-dev": {
+        "orchestra/testbench": "^7.0|^8.0|^9.0",
+        "phpunit/phpunit": "^9.0|^10.0|^11.0",
+        "mockery/mockery": "^1.4"
+    },
+    "autoload": {
+        "psr-4": {
+            "OpenSky\\Laravel\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "OpenSky\\Laravel\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "OpenSky\\Laravel\\OpenSkyServiceProvider"
+            ],
+            "aliases": {
+                "OpenSky": "OpenSky\\Laravel\\Facades\\OpenSky"
+            }
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+} 
