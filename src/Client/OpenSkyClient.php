@@ -99,7 +99,7 @@ class OpenSkyClient
             'extended' => $extended,
         ], fn($value) => $value !== null);
 
-        $response = $this->makeRequest('GET', 'states/all', $params);
+        $response = $this->makeRequest('states/all', $params);
         
         return StateVectorResponse::fromArray($response);
     }
@@ -123,7 +123,7 @@ class OpenSkyClient
             'serials' => $serials,
         ], fn($value) => $value !== null);
 
-        $response = $this->makeRequest('GET', 'states/own', $params);
+        $response = $this->makeRequest('states/own', $params);
         
         return StateVectorResponse::fromArray($response);
     }
@@ -145,7 +145,7 @@ class OpenSkyClient
             throw OpenSkyException::invalidTimeInterval('2 hours');
         }
 
-        $response = $this->makeRequest('GET', 'flights/all', [
+        $response = $this->makeRequest('flights/all', [
             'begin' => $begin,
             'end' => $end,
         ]);
@@ -171,7 +171,7 @@ class OpenSkyClient
             throw OpenSkyException::invalidTimeInterval('30 days');
         }
 
-        $response = $this->makeRequest('GET', 'flights/aircraft', [
+        $response = $this->makeRequest('flights/aircraft', [
             'icao24' => strtolower($icao24),
             'begin' => $begin,
             'end' => $end,
@@ -198,7 +198,7 @@ class OpenSkyClient
             throw OpenSkyException::invalidTimeInterval('7 days');
         }
 
-        $response = $this->makeRequest('GET', 'flights/arrival', [
+        $response = $this->makeRequest('flights/arrival', [
             'airport' => $airport,
             'begin' => $begin,
             'end' => $end,
@@ -225,7 +225,7 @@ class OpenSkyClient
             throw OpenSkyException::invalidTimeInterval('7 days');
         }
 
-        $response = $this->makeRequest('GET', 'flights/departure', [
+        $response = $this->makeRequest('flights/departure', [
             'airport' => $airport,
             'begin' => $begin,
             'end' => $end,
@@ -248,7 +248,7 @@ class OpenSkyClient
      */
     public function getTrackByAircraft(string $icao24, int $time = 0): TrackResponse
     {
-        $response = $this->makeRequest('GET', 'tracks', [
+        $response = $this->makeRequest('tracks', [
             'icao24' => strtolower($icao24),
             'time' => $time,
         ]);
@@ -256,9 +256,9 @@ class OpenSkyClient
         return TrackResponse::fromArray($response);
     }
 
-    private function makeRequest(string $method, string $endpoint, array $params = []): array
+    private function makeRequest(string $endpoint, array $params = []): array
     {
-        $cacheKey = $this->getCacheKey($method, $endpoint, $params);
+        $cacheKey = $this->getCacheKey($endpoint, $params);
         
         if (config('opensky.cache.enabled', true)) {
             $cached = Cache::store(config('opensky.cache.store', 'default'))
@@ -281,14 +281,10 @@ class OpenSkyClient
             }
 
             if (!empty($params)) {
-                if ($method === 'GET') {
-                    $options['query'] = $params;
-                } else {
-                    $options['json'] = $params;
-                }
+                $options['query'] = $params;
             }
 
-            $response = $this->httpClient->request($method, $endpoint, $options);
+            $response = $this->httpClient->request('GET', $endpoint, $options);
             $data = json_decode($response->getBody()->getContents(), true);
 
             if (config('opensky.cache.enabled', true)) {
@@ -306,10 +302,10 @@ class OpenSkyClient
         }
     }
 
-    private function getCacheKey(string $method, string $endpoint, array $params): string
+    private function getCacheKey(string $endpoint, array $params): string
     {
         $prefix = config('opensky.cache.prefix', 'opensky:');
-        $hash = md5($method . $endpoint . serialize($params));
+        $hash = md5($endpoint . serialize($params));
         
         return $prefix . $hash;
     }
