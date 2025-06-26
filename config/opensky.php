@@ -22,7 +22,10 @@ return [
     | 1. Legacy Basic Auth (username/password) - being deprecated
     | 2. OAuth2 Client Credentials Flow (recommended)
     |
-    | For OAuth2, set client_id and client_secret instead of username/password
+    | Credentials are loaded from environment variables for security.
+    | Add these to your .env file:
+    | OPENSKY_CLIENT_ID=your_client_id
+    | OPENSKY_CLIENT_SECRET=your_client_secret
     |
     */
 

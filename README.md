@@ -32,11 +32,13 @@ composer require iaewing/laravel-opensky
 
 The package will automatically register its service provider in Laravel 9+.
 
-Publish the configuration file:
+Optionally, publish the configuration file to customize cache settings, timeouts, or other options:
 
 ```bash
 php artisan vendor:publish --tag=opensky-config
 ```
+
+**Note**: Publishing the config is optional. The package works with default settings using only environment variables.
 
 ## Configuration
 
@@ -307,24 +309,36 @@ $route = $track->path->map(function ($waypoint) {
 
 ## Configuration Options
 
+After publishing the config file (`php artisan vendor:publish --tag=opensky-config`), you can customize these settings in `config/opensky.php`:
+
 ```php
 return [
-    'base_url' => 'https://opensky-network.org/api',
+    // API endpoint
+    'base_url' => env('OPENSKY_BASE_URL', 'https://opensky-network.org/api'),
+    
+    // Authentication (set in .env file)
     'username' => env('OPENSKY_USERNAME'),
     'password' => env('OPENSKY_PASSWORD'),
-    'timeout' => 30,
+    'client_id' => env('OPENSKY_CLIENT_ID'),
+    'client_secret' => env('OPENSKY_CLIENT_SECRET'),
+    'oauth_token_url' => env('OPENSKY_OAUTH_TOKEN_URL', 'https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token'),
     
+    // Request timeout
+    'timeout' => env('OPENSKY_TIMEOUT', 30),
+    
+    // Rate limiting
     'rate_limit' => [
-        'enabled' => true,
+        'enabled' => env('OPENSKY_RATE_LIMIT_ENABLED', true),
         'anonymous_per_day' => 400,
         'authenticated_per_day' => 4000,
         'active_feeder_per_day' => 8000,
     ],
     
+    // Response caching
     'cache' => [
-        'enabled' => true,
-        'ttl' => 60, // seconds
-        'store' => 'default',
+        'enabled' => env('OPENSKY_CACHE_ENABLED', true),
+        'ttl' => env('OPENSKY_CACHE_TTL', 60), // seconds
+        'store' => env('OPENSKY_CACHE_STORE', 'default'),
         'prefix' => 'opensky:',
     ],
 ];
