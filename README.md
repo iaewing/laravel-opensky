@@ -354,8 +354,19 @@ try {
 
 ## Testing
 
+This package uses [Pest](https://pestphp.com) for testing:
+
 ```bash
 composer test
+
+# Run tests with coverage
+./vendor/bin/pest --coverage
+
+# Run specific test file
+./vendor/bin/pest tests/Unit/OpenSkyClientTest.php
+
+# Run with verbose output
+./vendor/bin/pest --verbose
 ```
 
 ## License
