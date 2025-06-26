@@ -1,5 +1,8 @@
 # Laravel OpenSky Package
 
+[![Latest Version on Packagist](https://img.shields.io/packagist/v/iaewing/laravel-opensky.svg?style=flat-square)](https://packagist.org/packages/iaewing/laravel-opensky)
+[![Total Downloads](https://img.shields.io/packagist/dt/iaewing/laravel-opensky.svg?style=flat-square)](https://packagist.org/packages/iaewing/laravel-opensky)
+
 A Laravel package for easy integration with the [OpenSky Network API](https://openskynetwork.github.io/opensky-api/rest.html). This package provides a simple and elegant way to access real-time and historical aviation data.
 
 **Note**: This package is for research and non-commercial purposes only, as per OpenSky Network's terms of use. For commercial usage, contact OpenSky Network directly.
