@@ -17,6 +17,11 @@ A Laravel package for easy integration with the [OpenSky Network API](https://op
 - **Authentication**: Support for both anonymous and authenticated requests
 - **Comprehensive Testing**: Full test coverage with PHPUnit
 
+## Requirements
+
+- **PHP**: 8.1 or higher
+- **Laravel**: 9.x or higher
+
 ## Installation
 
 Install the package via Composer:
