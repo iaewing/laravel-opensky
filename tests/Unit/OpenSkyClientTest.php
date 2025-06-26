@@ -126,8 +126,8 @@ it('can get track by aircraft', function () {
 it('validates time interval for flights', function () {
     $client = new OpenSkyClient();
 
-    expect(fn() => $client->getFlightsInTimeInterval(0, 3601))
-        ->toThrow(OpenSkyException::class, 'Time interval must not be larger than 1 hour');
+    expect(fn() => $client->getFlightsInTimeInterval(0, 7201))
+        ->toThrow(OpenSkyException::class, 'Time interval must not be larger than 2 hour');
 });
 
 it('validates time interval for aircraft flights', function () {
