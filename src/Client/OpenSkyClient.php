@@ -9,71 +9,37 @@ use OpenSky\Laravel\DTOs\FlightResponse;
 use OpenSky\Laravel\DTOs\TrackResponse;
 use OpenSky\Laravel\Exceptions\OpenSkyException;
 use Psr\SimpleCache\CacheInterface;
+use GuzzleHttp\Client;
 
 class OpenSkyClient
 {
     private ClientInterface $httpClient;
-    private string $baseUrl;
-    // Legacy basic authentication (being deprecated)
-    private ?string $username;
-    private ?string $password;
-
-    // OAuth2 client credentials (recommended)
-    private ?string $clientId;
-    private ?string $clientSecret;
-    private ?string $oauthTokenUrl;
-    private int $timeout;
+    private OpenSkyConfig $config;
     private ?string $accessToken = null;
 
     private ?CacheInterface $cache;
-    private int $cacheTtl;
-    private string $cachePrefix;
 
     /**
      * Create a new OpenSky API client instance.
      *
-     * @param string $baseUrl The base URL for the OpenSky API
-     * @param string|null $username Legacy basic auth username (being deprecated)
-     * @param string|null $password Legacy basic auth password (being deprecated)
-     * @param int $timeout Request timeout in seconds
-     * @param string|null $clientId OAuth2 client ID (recommended)
-     * @param string|null $clientSecret OAuth2 client secret (recommended)
-     * @param string|null $oauthTokenUrl OAuth2 token endpoint URL
+     * @param OpenSkyConfig $config Configuration object
      * @param \GuzzleHttp\ClientInterface|null $httpClient Optional HTTP client instance
      * @param \Psr\SimpleCache\CacheInterface|null $cache Optional PSR-16 cache instance
-     * @param int $cacheTtl Cache TTL in seconds (default: 60)
-     * @param string $cachePrefix Cache key prefix (default: 'opensky:')
      */
     public function __construct(
-        string $baseUrl = 'https://opensky-network.org/api',
-        ?string $username = null,
-        ?string $password = null,
-        int $timeout = 30,
-        ?string $clientId = null,
-        ?string $clientSecret = null,
-        ?string $oauthTokenUrl = null,
+        OpenSkyConfig $config,
         ?ClientInterface $httpClient = null,
-        ?CacheInterface $cache = null,
-        int $cacheTtl = 60,
-        string $cachePrefix = 'opensky:'
+        ?CacheInterface $cache = null
     ) {
-        $this->baseUrl = rtrim($baseUrl, '/') . '/'; // Ensure trailing slash
-        $this->username = $username;
-        $this->password = $password;
-        $this->clientId = $clientId;
-        $this->clientSecret = $clientSecret;
-        $this->oauthTokenUrl = $oauthTokenUrl ?? 'https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token';
-        $this->timeout = $timeout;
+        $this->config = $config;
         $this->cache = $cache;
-        $this->cacheTtl = $cacheTtl;
-        $this->cachePrefix = $cachePrefix;
 
         if ($httpClient) {
             $this->httpClient = $httpClient;
         } else {
             $this->httpClient = new Client([
-                'base_uri' => $this->baseUrl,
-                'timeout' => $this->timeout,
+                'base_uri' => $this->config->baseUrl,
+                'timeout' => $this->config->timeout,
                 'headers' => [
                     'User-Agent' => 'Laravel OpenSky Package/1.0 (Guzzle)',
                     'Accept' => 'application/json',
@@ -291,11 +257,11 @@ class OpenSkyClient
             $options = [];
 
             // Handle authentication - prefer OAuth2 over basic auth
-            if ($this->clientId && $this->clientSecret) {
+            if ($this->config->clientId && $this->config->clientSecret) {
                 $accessToken = $this->getAccessToken();
                 $options['headers']['Authorization'] = "Bearer {$accessToken}";
-            } elseif ($this->username && $this->password) {
-                $options['auth'] = [$this->username, $this->password];
+            } elseif ($this->config->username && $this->config->password) {
+                $options['auth'] = [$this->config->username, $this->config->password];
             }
 
             if (!empty($params)) {
@@ -306,7 +272,7 @@ class OpenSkyClient
             $data = json_decode($response->getBody()->getContents(), true);
 
             if ($this->cache) {
-                $this->cache->set($cacheKey, $data, $this->cacheTtl);
+                $this->cache->set($cacheKey, $data, $this->config->cacheTtl);
             }
 
             return $data;
@@ -323,12 +289,12 @@ class OpenSkyClient
     {
         $hash = md5($endpoint . serialize($params));
 
-        return $this->cachePrefix . $hash;
+        return $this->config->cachePrefix . $hash;
     }
 
     private function requireAuthentication(): void
     {
-        if ((!$this->username || !$this->password) && (!$this->clientId || !$this->clientSecret)) {
+        if ((!$this->config->username || !$this->config->password) && (!$this->config->clientId || !$this->config->clientSecret)) {
             throw OpenSkyException::authenticationRequired();
         }
     }
@@ -339,12 +305,12 @@ class OpenSkyClient
             return $this->accessToken;
         }
 
-        if (!$this->clientId || !$this->clientSecret) {
+        if (!$this->config->clientId || !$this->config->clientSecret) {
             throw OpenSkyException::authenticationRequired();
         }
 
         // Check cache for existing token
-        $cacheKey = 'opensky_oauth_token_' . md5($this->clientId);
+        $cacheKey = 'opensky_oauth_token_' . md5($this->config->clientId);
         if ($this->cache) {
             $cachedToken = $this->cache->get($cacheKey);
 
@@ -356,11 +322,11 @@ class OpenSkyClient
 
         // Request new token
         try {
-            $response = $this->httpClient->request('POST', $this->oauthTokenUrl, [
+            $response = $this->httpClient->request('POST', $this->config->oauthTokenUrl, [
                 'form_params' => [
                     'grant_type' => 'client_credentials',
-                    'client_id' => $this->clientId,
-                    'client_secret' => $this->clientSecret,
+                    'client_id' => $this->config->clientId,
+                    'client_secret' => $this->config->clientSecret,
                 ],
                 'headers' => [
                     'Content-Type' => 'application/x-www-form-urlencoded',

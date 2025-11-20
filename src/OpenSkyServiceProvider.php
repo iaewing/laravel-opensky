@@ -4,6 +4,7 @@ namespace OpenSky\Laravel;
 
 use Illuminate\Support\ServiceProvider;
 use OpenSky\Laravel\Client\OpenSkyClient;
+use OpenSky\Laravel\Client\OpenSkyConfig;
 
 class OpenSkyServiceProvider extends ServiceProvider
 {
@@ -22,18 +23,22 @@ class OpenSkyServiceProvider extends ServiceProvider
                 $cache = $app['cache']->store($config['cache']['store'] ?? null);
             }
 
-            return new OpenSkyClient(
+            $clientConfig = new OpenSkyConfig(
                 baseUrl: $config['base_url'],
+                timeout: $config['timeout'] ?? 30,
                 username: $config['username'] ?? null,
                 password: $config['password'] ?? null,
-                timeout: $config['timeout'] ?? 30,
                 clientId: $config['client_id'] ?? null,
                 clientSecret: $config['client_secret'] ?? null,
                 oauthTokenUrl: $config['oauth_token_url'] ?? null,
-                httpClient: null,
-                cache: $cache,
                 cacheTtl: $config['cache']['ttl'] ?? 60,
                 cachePrefix: $config['cache']['prefix'] ?? 'opensky:'
+            );
+
+            return new OpenSkyClient(
+                config: $clientConfig,
+                httpClient: null,
+                cache: $cache
             );
         });
 
