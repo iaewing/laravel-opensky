@@ -8,7 +8,7 @@ use OpenSky\Laravel\DTOs\StateVectorResponse;
 use OpenSky\Laravel\DTOs\FlightResponse;
 use OpenSky\Laravel\DTOs\TrackResponse;
 use OpenSky\Laravel\Exceptions\OpenSkyException;
-use Illuminate\Support\Facades\Cache;
+use Psr\SimpleCache\CacheInterface;
 
 class OpenSkyClient
 {
@@ -25,6 +25,10 @@ class OpenSkyClient
     private int $timeout;
     private ?string $accessToken = null;
 
+    private ?CacheInterface $cache;
+    private int $cacheTtl;
+    private string $cachePrefix;
+
     /**
      * Create a new OpenSky API client instance.
      *
@@ -36,6 +40,9 @@ class OpenSkyClient
      * @param string|null $clientSecret OAuth2 client secret (recommended)
      * @param string|null $oauthTokenUrl OAuth2 token endpoint URL
      * @param \GuzzleHttp\ClientInterface|null $httpClient Optional HTTP client instance
+     * @param \Psr\SimpleCache\CacheInterface|null $cache Optional PSR-16 cache instance
+     * @param int $cacheTtl Cache TTL in seconds (default: 60)
+     * @param string $cachePrefix Cache key prefix (default: 'opensky:')
      */
     public function __construct(
         string $baseUrl = 'https://opensky-network.org/api',
@@ -45,7 +52,10 @@ class OpenSkyClient
         ?string $clientId = null,
         ?string $clientSecret = null,
         ?string $oauthTokenUrl = null,
-        ?ClientInterface $httpClient = null
+        ?ClientInterface $httpClient = null,
+        ?CacheInterface $cache = null,
+        int $cacheTtl = 60,
+        string $cachePrefix = 'opensky:'
     ) {
         $this->baseUrl = rtrim($baseUrl, '/') . '/'; // Ensure trailing slash
         $this->username = $username;
@@ -54,6 +64,9 @@ class OpenSkyClient
         $this->clientSecret = $clientSecret;
         $this->oauthTokenUrl = $oauthTokenUrl ?? 'https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token';
         $this->timeout = $timeout;
+        $this->cache = $cache;
+        $this->cacheTtl = $cacheTtl;
+        $this->cachePrefix = $cachePrefix;
 
         if ($httpClient) {
             $this->httpClient = $httpClient;
@@ -266,9 +279,8 @@ class OpenSkyClient
     {
         $cacheKey = $this->getCacheKey($endpoint, $params);
 
-        if (config('opensky.cache.enabled', true)) {
-            $cached = Cache::store(config('opensky.cache.store', 'default'))
-                ->get($cacheKey);
+        if ($this->cache) {
+            $cached = $this->cache->get($cacheKey);
 
             if ($cached !== null) {
                 return $cached;
@@ -293,9 +305,8 @@ class OpenSkyClient
             $response = $this->httpClient->request('GET', $endpoint, $options);
             $data = json_decode($response->getBody()->getContents(), true);
 
-            if (config('opensky.cache.enabled', true)) {
-                Cache::store(config('opensky.cache.store', 'default'))
-                    ->put($cacheKey, $data, config('opensky.cache.ttl', 60));
+            if ($this->cache) {
+                $this->cache->set($cacheKey, $data, $this->cacheTtl);
             }
 
             return $data;
@@ -310,10 +321,9 @@ class OpenSkyClient
 
     private function getCacheKey(string $endpoint, array $params): string
     {
-        $prefix = config('opensky.cache.prefix', 'opensky:');
         $hash = md5($endpoint . serialize($params));
 
-        return $prefix . $hash;
+        return $this->cachePrefix . $hash;
     }
 
     private function requireAuthentication(): void
@@ -333,11 +343,10 @@ class OpenSkyClient
             throw OpenSkyException::authenticationRequired();
         }
 
-        // Check Laravel cache for existing token
+        // Check cache for existing token
         $cacheKey = 'opensky_oauth_token_' . md5($this->clientId);
-        if (config('opensky.cache.enabled', true)) {
-            $cachedToken = Cache::store(config('opensky.cache.store', 'default'))
-                ->get($cacheKey);
+        if ($this->cache) {
+            $cachedToken = $this->cache->get($cacheKey);
 
             if ($cachedToken) {
                 $this->accessToken = $cachedToken;
@@ -370,10 +379,9 @@ class OpenSkyClient
             }
 
             // Cache the token for slightly less than its expiry time to avoid edge cases
-            if (config('opensky.cache.enabled', true)) {
+            if ($this->cache) {
                 $cacheTtl = max(60, $expiresIn - 300); // Cache for expiry - 5 minutes, minimum 1 minute
-                Cache::store(config('opensky.cache.store', 'default'))
-                    ->put($cacheKey, $this->accessToken, $cacheTtl);
+                $this->cache->set($cacheKey, $this->accessToken, $cacheTtl);
             }
 
             return $this->accessToken;

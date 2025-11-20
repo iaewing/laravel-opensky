@@ -16,7 +16,12 @@ class OpenSkyServiceProvider extends ServiceProvider
 
         $this->app->singleton(OpenSkyClient::class, function ($app) {
             $config = $app['config']['opensky'];
-            
+
+            $cache = null;
+            if ($config['cache']['enabled'] ?? true) {
+                $cache = $app['cache']->store($config['cache']['store'] ?? null);
+            }
+
             return new OpenSkyClient(
                 baseUrl: $config['base_url'],
                 username: $config['username'] ?? null,
@@ -24,7 +29,11 @@ class OpenSkyServiceProvider extends ServiceProvider
                 timeout: $config['timeout'] ?? 30,
                 clientId: $config['client_id'] ?? null,
                 clientSecret: $config['client_secret'] ?? null,
-                oauthTokenUrl: $config['oauth_token_url'] ?? null
+                oauthTokenUrl: $config['oauth_token_url'] ?? null,
+                httpClient: null,
+                cache: $cache,
+                cacheTtl: $config['cache']['ttl'] ?? 60,
+                cachePrefix: $config['cache']['prefix'] ?? 'opensky:'
             );
         });
 
@@ -39,4 +48,4 @@ class OpenSkyServiceProvider extends ServiceProvider
             ], 'opensky-config');
         }
     }
-} 
+}
