@@ -2,7 +2,7 @@
 
 namespace OpenSky\Laravel\Client;
 
-use GuzzleHttp\Client;
+use GuzzleHttp\ClientInterface;
 use GuzzleHttp\Exception\GuzzleException;
 use OpenSky\Laravel\DTOs\StateVectorResponse;
 use OpenSky\Laravel\DTOs\FlightResponse;
@@ -12,12 +12,12 @@ use Illuminate\Support\Facades\Cache;
 
 class OpenSkyClient
 {
-    private Client $httpClient;
+    private ClientInterface $httpClient;
     private string $baseUrl;
     // Legacy basic authentication (being deprecated)
     private ?string $username;
     private ?string $password;
-    
+
     // OAuth2 client credentials (recommended)
     private ?string $clientId;
     private ?string $clientSecret;
@@ -35,6 +35,7 @@ class OpenSkyClient
      * @param string|null $clientId OAuth2 client ID (recommended)
      * @param string|null $clientSecret OAuth2 client secret (recommended)
      * @param string|null $oauthTokenUrl OAuth2 token endpoint URL
+     * @param \GuzzleHttp\ClientInterface|null $httpClient Optional HTTP client instance
      */
     public function __construct(
         string $baseUrl = 'https://opensky-network.org/api',
@@ -43,7 +44,8 @@ class OpenSkyClient
         int $timeout = 30,
         ?string $clientId = null,
         ?string $clientSecret = null,
-        ?string $oauthTokenUrl = null
+        ?string $oauthTokenUrl = null,
+        ?ClientInterface $httpClient = null
     ) {
         $this->baseUrl = rtrim($baseUrl, '/') . '/'; // Ensure trailing slash
         $this->username = $username;
@@ -53,14 +55,18 @@ class OpenSkyClient
         $this->oauthTokenUrl = $oauthTokenUrl ?? 'https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token';
         $this->timeout = $timeout;
 
-        $this->httpClient = new Client([
-            'base_uri' => $this->baseUrl,
-            'timeout' => $this->timeout,
-            'headers' => [
-                'User-Agent' => 'Laravel OpenSky Package/1.0 (Guzzle)',
-                'Accept' => 'application/json',
-            ],
-        ]);
+        if ($httpClient) {
+            $this->httpClient = $httpClient;
+        } else {
+            $this->httpClient = new Client([
+                'base_uri' => $this->baseUrl,
+                'timeout' => $this->timeout,
+                'headers' => [
+                    'User-Agent' => 'Laravel OpenSky Package/1.0 (Guzzle)',
+                    'Accept' => 'application/json',
+                ],
+            ]);
+        }
     }
 
     /**
@@ -100,7 +106,7 @@ class OpenSkyClient
         ], fn($value) => $value !== null);
 
         $response = $this->makeRequest('states/all', $params);
-        
+
         return StateVectorResponse::fromArray($response);
     }
 
@@ -124,7 +130,7 @@ class OpenSkyClient
         ], fn($value) => $value !== null);
 
         $response = $this->makeRequest('states/own', $params);
-        
+
         return StateVectorResponse::fromArray($response);
     }
 
@@ -259,11 +265,11 @@ class OpenSkyClient
     private function makeRequest(string $endpoint, array $params = []): array
     {
         $cacheKey = $this->getCacheKey($endpoint, $params);
-        
+
         if (config('opensky.cache.enabled', true)) {
             $cached = Cache::store(config('opensky.cache.store', 'default'))
                 ->get($cacheKey);
-            
+
             if ($cached !== null) {
                 return $cached;
             }
@@ -271,7 +277,7 @@ class OpenSkyClient
 
         try {
             $options = [];
-            
+
             // Handle authentication - prefer OAuth2 over basic auth
             if ($this->clientId && $this->clientSecret) {
                 $accessToken = $this->getAccessToken();
@@ -306,7 +312,7 @@ class OpenSkyClient
     {
         $prefix = config('opensky.cache.prefix', 'opensky:');
         $hash = md5($endpoint . serialize($params));
-        
+
         return $prefix . $hash;
     }
 
@@ -332,7 +338,7 @@ class OpenSkyClient
         if (config('opensky.cache.enabled', true)) {
             $cachedToken = Cache::store(config('opensky.cache.store', 'default'))
                 ->get($cacheKey);
-            
+
             if ($cachedToken) {
                 $this->accessToken = $cachedToken;
                 return $this->accessToken;
@@ -341,7 +347,7 @@ class OpenSkyClient
 
         // Request new token
         try {
-            $response = $this->httpClient->post($this->oauthTokenUrl, [
+            $response = $this->httpClient->request('POST', $this->oauthTokenUrl, [
                 'form_params' => [
                     'grant_type' => 'client_credentials',
                     'client_id' => $this->clientId,
@@ -375,4 +381,4 @@ class OpenSkyClient
             throw OpenSkyException::oauthTokenFailed($e->getMessage());
         }
     }
-} 
+}
