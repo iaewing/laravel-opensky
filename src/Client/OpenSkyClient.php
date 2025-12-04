@@ -254,7 +254,10 @@ class OpenSkyClient
         }
 
         try {
-            $options = [];
+            $options = [
+                // Don't throw exceptions on 4xx/5xx responses - we'll handle them ourselves
+                'http_errors' => false,
+            ];
 
             // Handle authentication - prefer OAuth2 over basic auth
             if ($this->config->clientId && $this->config->clientSecret) {
@@ -269,7 +272,37 @@ class OpenSkyClient
             }
 
             $response = $this->httpClient->request('GET', $endpoint, $options);
-            $data = json_decode($response->getBody()->getContents(), true);
+            $statusCode = $response->getStatusCode();
+            $body = $response->getBody()->getContents();
+
+            // Check for HTTP error status codes
+            if ($statusCode >= 400) {
+                $errorMessage = $this->extractErrorMessage($body, $statusCode);
+                throw new OpenSkyException(
+                    "OpenSky API returned an error: {$errorMessage}",
+                    $statusCode
+                );
+            }
+
+            // Validate that we received a valid JSON response
+            $data = json_decode($body, true);
+
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                // Response is not valid JSON (likely an HTML error page)
+                $errorMessage = $this->extractErrorMessage($body, $statusCode);
+                throw new OpenSkyException(
+                    "OpenSky API returned an invalid response: {$errorMessage}",
+                    $statusCode
+                );
+            }
+
+            // Additional validation: ensure we got an array back
+            if (!is_array($data)) {
+                throw new OpenSkyException(
+                    "OpenSky API returned unexpected data format",
+                    $statusCode
+                );
+            }
 
             if ($this->cache) {
                 $this->cache->set($cacheKey, $data, $this->config->cacheTtl);
@@ -283,6 +316,31 @@ class OpenSkyClient
                 $e
             );
         }
+    }
+
+    /**
+     * Extract a clean error message from HTML or other non-JSON responses
+     */
+    private function extractErrorMessage(string $body, int $statusCode): string
+    {
+        // Check if it's an HTML response
+        if (stripos($body, '<html') !== false || stripos($body, '<!DOCTYPE') !== false) {
+            // Try to extract the title tag for a cleaner error message
+            if (preg_match('/<title>(.*?)<\/title>/i', $body, $matches)) {
+                return trim(strip_tags($matches[1])) . " (HTTP {$statusCode})";
+            }
+
+            // Fallback to generic HTML error message
+            return "Server returned HTML error page (HTTP {$statusCode})";
+        }
+
+        // For other non-JSON responses, return a truncated version
+        $truncated = substr($body, 0, 200);
+        if (strlen($body) > 200) {
+            $truncated .= '...';
+        }
+
+        return $truncated;
     }
 
     private function getCacheKey(string $endpoint, array $params): string

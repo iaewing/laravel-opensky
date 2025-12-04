@@ -5,25 +5,22 @@ use GuzzleHttp\Handler\MockHandler;
 use GuzzleHttp\HandlerStack;
 use GuzzleHttp\Psr7\Response;
 use OpenSky\Laravel\Client\OpenSkyClient;
+use OpenSky\Laravel\Client\OpenSkyConfig;
 use OpenSky\Laravel\DTOs\StateVectorResponse;
 use OpenSky\Laravel\DTOs\FlightResponse;
 use OpenSky\Laravel\DTOs\TrackResponse;
 use OpenSky\Laravel\Exceptions\OpenSkyException;
 
-function mockClient(array $responses): OpenSkyClient
+function mockClient(array $responses, ?OpenSkyConfig $config = null): OpenSkyClient
 {
     $mock = new MockHandler($responses);
     $handlerStack = HandlerStack::create($mock);
     $httpClient = new Client(['handler' => $handlerStack]);
 
-    $client = new OpenSkyClient();
-    
-    $reflection = new ReflectionClass($client);
-    $property = $reflection->getProperty('httpClient');
-    $property->setAccessible(true);
-    $property->setValue($client, $httpClient);
+    // Use provided config or create a default one
+    $config = $config ?? new OpenSkyConfig();
 
-    return $client;
+    return new OpenSkyClient($config, $httpClient);
 }
 
 it('can get all state vectors', function () {
@@ -124,28 +121,28 @@ it('can get track by aircraft', function () {
 });
 
 it('validates time interval for flights', function () {
-    $client = new OpenSkyClient();
+    $client = new OpenSkyClient(new OpenSkyConfig());
 
     expect(fn() => $client->getFlightsInTimeInterval(0, 7201))
         ->toThrow(OpenSkyException::class, 'Time interval must not be larger than 2 hour');
 });
 
 it('validates time interval for aircraft flights', function () {
-    $client = new OpenSkyClient();
+    $client = new OpenSkyClient(new OpenSkyConfig());
 
     expect(fn() => $client->getFlightsByAircraft('3c4b26', 0, 2592001))
         ->toThrow(OpenSkyException::class, 'Time interval must not be larger than 30 days');
 });
 
 it('validates time interval for airport arrivals', function () {
-    $client = new OpenSkyClient();
+    $client = new OpenSkyClient(new OpenSkyConfig());
 
     expect(fn() => $client->getArrivalsByAirport('EDDF', 0, 604801))
         ->toThrow(OpenSkyException::class, 'Time interval must not be larger than 7 days');
 });
 
 it('requires authentication for own state vectors', function () {
-    $client = new OpenSkyClient();
+    $client = new OpenSkyClient(new OpenSkyConfig());
 
     expect(fn() => $client->getOwnStateVectors())
         ->toThrow(OpenSkyException::class, 'This endpoint requires authentication. Please provide either username/password or OAuth2 credentials.');
@@ -186,21 +183,17 @@ it('can authenticate with oauth2', function () {
         ]
     ];
 
+    // Create config with OAuth credentials
+    $config = new OpenSkyConfig(
+        clientId: 'test_client_id',
+        clientSecret: 'test_client_secret',
+        oauthTokenUrl: 'https://opensky-network.org/api/oauth/token'
+    );
+
     $client = mockClient([
         new Response(200, [], json_encode($tokenResponse)), // OAuth token request
         new Response(200, [], json_encode($stateResponse))   // API request
-    ]);
-
-    // Set OAuth credentials using reflection
-    $reflection = new ReflectionClass($client);
-    
-    $clientIdProperty = $reflection->getProperty('clientId');
-    $clientIdProperty->setAccessible(true);
-    $clientIdProperty->setValue($client, 'test_client_id');
-    
-    $clientSecretProperty = $reflection->getProperty('clientSecret');
-    $clientSecretProperty->setAccessible(true);
-    $clientSecretProperty->setValue($client, 'test_client_secret');
+    ], $config);
 
     $response = $client->getOwnStateVectors();
 
@@ -221,32 +214,59 @@ it('prefers oauth2 over basic auth when both are configured', function () {
         'states' => []
     ];
 
+    // Create config with both OAuth and basic auth credentials
+    $config = new OpenSkyConfig(
+        username: 'test_username',
+        password: 'test_password',
+        clientId: 'test_client_id',
+        clientSecret: 'test_client_secret',
+        oauthTokenUrl: 'https://opensky-network.org/api/oauth/token'
+    );
+
     $client = mockClient([
         new Response(200, [], json_encode($tokenResponse)),
         new Response(200, [], json_encode($stateResponse))
-    ]);
-
-    $reflection = new ReflectionClass($client);
-    
-    // Set both OAuth and basic auth credentials
-    $clientIdProperty = $reflection->getProperty('clientId');
-    $clientIdProperty->setAccessible(true);
-    $clientIdProperty->setValue($client, 'test_client_id');
-    
-    $clientSecretProperty = $reflection->getProperty('clientSecret');
-    $clientSecretProperty->setAccessible(true);
-    $clientSecretProperty->setValue($client, 'test_client_secret');
-
-    $usernameProperty = $reflection->getProperty('username');
-    $usernameProperty->setAccessible(true);
-    $usernameProperty->setValue($client, 'test_username');
-    
-    $passwordProperty = $reflection->getProperty('password');
-    $passwordProperty->setAccessible(true);
-    $passwordProperty->setValue($client, 'test_password');
+    ], $config);
 
     $response = $client->getOwnStateVectors();
 
     // Should succeed using OAuth2, not basic auth
     expect($response)->toBeInstanceOf(StateVectorResponse::class);
-}); 
+});
+
+it('throws exception when API returns HTML error page', function () {
+    $htmlErrorPage = '<!DOCTYPE html>
+<html>
+<head>
+    <title>503 Service Temporarily Unavailable</title>
+</head>
+<body>
+    <center><h1>503 Service Temporarily Unavailable</h1></center>
+</body>
+</html>';
+
+    $client = mockClient([
+        new Response(503, ['Content-Type' => 'text/html'], $htmlErrorPage)
+    ]);
+
+    expect(fn() => $client->getAllStateVectors())
+        ->toThrow(OpenSkyException::class, '503 Service Temporarily Unavailable (HTTP 503)');
+});
+
+it('throws exception when API returns invalid JSON', function () {
+    $client = mockClient([
+        new Response(200, [], 'This is not valid JSON')
+    ]);
+
+    expect(fn() => $client->getAllStateVectors())
+        ->toThrow(OpenSkyException::class, 'OpenSky API returned an invalid response');
+});
+
+it('throws exception when API returns non-array JSON', function () {
+    $client = mockClient([
+        new Response(200, [], '"just a string"')
+    ]);
+
+    expect(fn() => $client->getAllStateVectors())
+        ->toThrow(OpenSkyException::class, 'OpenSky API returned unexpected data format');
+});
