@@ -91,7 +91,7 @@ class OpenSkyClient
 
     /**
      * Retrieve state vectors for aircraft registered to your account.
-     * 
+     *
      * This endpoint is only available for authenticated users and returns
      * state vectors for aircraft that you have registered ownership of.
      * Requires authentication via OAuth2 or basic auth.
@@ -121,19 +121,41 @@ class OpenSkyClient
      *
      * @param int $begin Unix timestamp for the start of the time interval
      * @param int $end Unix timestamp for the end of the time interval (max 2 hours after begin, as per OpenSky API)
+     * @param array|null $icao24 Array of ICAO24 transponder addresses to filter by
+     * @param float|null $lamin Lower bound for latitude (WGS-84, decimal degrees)
+     * @param float|null $lomin Lower bound for longitude (WGS-84, decimal degrees)
+     * @param float|null $lamax Upper bound for latitude (WGS-84, decimal degrees)
+     * @param float|null $lomax Upper bound for longitude (WGS-84, decimal degrees)
+     * @param int|null $extended Set to 1 to retrieve additional data fields
      * @return FlightResponse Collection of flights within the time interval
      * @throws OpenSkyException When time interval exceeds 2 hours (OpenSky API limitation) or API request fails
      */
-    public function getFlightsInTimeInterval(int $begin, int $end): FlightResponse
-    {
+    public function getFlightsInTimeInterval(
+        int $begin,
+        int $end,
+        ?array $icao24 = null,
+        ?float $lamin = null,
+        ?float $lomin = null,
+        ?float $lamax = null,
+        ?float $lomax = null,
+        ?int $extended = null
+    ): FlightResponse {
         if ($end - $begin > 7200) {
             throw OpenSkyException::invalidTimeInterval('2 hours');
         }
 
-        $response = $this->makeRequest('flights/all', [
+        $params = array_filter([
             'begin' => $begin,
             'end' => $end,
-        ]);
+            'icao24' => $icao24,
+            'lamin' => $lamin,
+            'lomin' => $lomin,
+            'lamax' => $lamax,
+            'lomax' => $lomax,
+            'extended' => $extended,
+        ], fn($value) => $value !== null);
+
+        $response = $this->makeRequest('flights/all', $params);
 
         return FlightResponse::fromArray($response);
     }
