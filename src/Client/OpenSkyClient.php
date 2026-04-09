@@ -263,6 +263,17 @@ class OpenSkyClient
         return TrackResponse::fromArray($response);
     }
 
+    /**
+     * Return a copy of this client with caching disabled.
+     * Useful for background polling jobs where freshness is required.
+     */
+    public function withoutCache(): static
+    {
+        $clone = clone $this;
+        $clone->cache = null;
+        return $clone;
+    }
+
     private function makeRequest(string $endpoint, array $params = []): array
     {
         $cacheKey = $this->getCacheKey($endpoint, $params);
